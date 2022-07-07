@@ -254,6 +254,32 @@
 			  </div>
 			</div>
 		</div>
+		
+       	<div class="div1">
+        	<h5>הפעלה מיידית</h5>  
+        	<div class="row" align="right">
+        	<table>
+        		<tr>
+        		<th width=20>
+        		<button type = "button" name="stoptBtn" class="btn btn-info" onclick="stopBtnClicked(this)">הפסק</button>
+				</th>
+	        	<th width=20></th>
+				<th>
+        		<th width=20>
+        		<button type = "button" name="startBtn" class="btn btn-success" onclick="startBtnClicked(this)">התחל</button>
+				</th>
+	        	<th width=20></th>
+				<th>
+					<input type="number" name="temp4" min="30" max="50" onchange="tempChanged(this)">
+				</th>
+				<th width=20></th>
+				<th><h6>:טמפרטורה</h6></th> 
+				<th width=20></th>
+				</tr> 
+			</table>
+			</div>
+		</div>		
+		
         <div class="div1">
         	<h5>1 הפעלה</h5>  
         	
@@ -353,22 +379,7 @@
 	      	</div>       	
        	</div>    
        	
-       	<div class="div1">
-        	<h5>הפעלה מיידית</h5>  
-        	<div class="row" align="right">
-        	<table>
-				<tr>
-	        	<th width=20></th>
-				<th>
-					<input type="number" name="temp4" min="30" max="50" onchange="tempChanged(this)">
-				</th>
-				<th width=20></th>
-				<th><h6>:טמפרטורה</h6></th> 
-				<th width=20></th>
-				</tr> 
-			</table>
-			</div>
-		</div>
+
 		</div>  
 		
 

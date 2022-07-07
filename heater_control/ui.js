@@ -212,8 +212,11 @@ function restoreSettings(buffer) {
 		// Set state
 		btnName = settings["programs"][i-1]["state"];
 		btn = (document.getElementsByName(btnName + i))[0];
+		console.log("Setting state for button " + i + " : " + btn);
 		setStateButton(btn);	
 	}
+	// Restore immidiate program temp
+	(document.getElementsByName('temp4'))[0].value = settings["programs"][settings.progCount]["temp"];
 }
 
 function setStateButton(btn) {
@@ -233,6 +236,23 @@ function setStateButton(btn) {
 	}
 }
 
+function requestStateUpdate() {
+	var message = new Paho.MQTT.Message("update");
+	message.destinationName = "heater/command/state";
+	mqttClient.send(message);	
+}
+
+function startBtnClicked(btn) {
+	var message = new Paho.MQTT.Message("start");
+	message.destinationName = "heater/command/start";
+	mqttClient.send(message);
+}
+
+function stopBtnClicked(btn) {
+	var message = new Paho.MQTT.Message("stop");
+	message.destinationName = "heater/command/stop";
+	mqttClient.send(message);
+}
 
 $('.bootstrap-timepicker> input').timepicker({minuteStep:15});
 

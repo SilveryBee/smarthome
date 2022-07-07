@@ -30,6 +30,8 @@ function Connect(){
 function Connected() {
   console.log("Connected!");
   mqttClient.subscribe(subscription);
+  // Send state update request to remote server
+  requestStateUpdate();
 }
 
 /*Callback for failed connection*/

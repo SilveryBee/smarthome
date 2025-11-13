@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>בקרת דוד חכם</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+    <script src="webio_mqtt.js" type="text/javascript"></script>
+    <script src="ui.js" type="text/javascript" defer></script>
+    <style>
+        /* Base settings and Responsiveness */
+        body {
+            font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;
+            display: flex; justify-content: center; align-items: center; min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .boiler-control-container {
+            width: 100%; max-width: 600px; background-color: #ffffff; padding: 20px;
+            border-radius: 10px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+        }
+        h1 { text-align: center; color: #333; margin-top: 0; margin-bottom: 25px; }
+
+        /* --- Temperature Gauge Styling (Horizontal Bar) --- */
+        .gauge-container {
+            width: 100%; 
+            height: 40px; 
+            background-color: #e0e0e0; 
+            border-radius: 20px;
+            overflow: hidden; 
+            position: relative; 
+            border: 2px solid #ccc;
+            margin-bottom: 20px;
+        }
+        .gauge-fill {
+            height: 100%; 
+            width: 0%; 
+            background-color: #3498db; 
+            border-radius: 20px 0 0 20px;
+            transition: width 0.5s ease, background-color 0.5s ease;
+        }
+        .gauge-fill.heating-active {
+            background-color: #e67e22;
+            background-image: linear-gradient(45deg, 
+                rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, 
+                rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent);
+            background-size: 40px 40px; 
+            animation: heating-stripes 2s linear infinite;
+        }
+
+        .target-marker {
+            position: absolute;
+            top: 0;
+            width: 3px; 
+            height: 100%;
+            background-color: #e74c3c; 
+            z-index: 5; 
+            transition: left 0.5s ease; 
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        .gauge-text {
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%);
+            color: #ffffff; 
+            font-weight: bold; 
+            font-size: 1.2rem;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.4); 
+            white-space: nowrap;
+        }
+        .gauge-text small {
+            display: none; 
+        }
+        @keyframes heating-stripes {
+            from { background-position: 0 0; }
+            to { background-position: 40px 0; }
+        }
+        
+        /* --- Manual Controls Styling (Unchanged) --- */
+        .separator { border: 0; height: 1px; background-color: #eee; margin: 30px 0; }
+        .manual-controls h2 { text-align: center; color: #444; margin-top: 0; margin-bottom: 20px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        .form-group input[type="number"] {
+            width: 100%; padding: 12px; font-size: 1.2rem; border: 1px solid #ccc;
+            border-radius: 5px; box-sizing: border-box; text-align: center;
+        }
+        .button-group { display: flex; gap: 10px; }
+        .btn {
+            flex: 1; padding: 12px; font-size: 1.1rem; font-weight: bold;
+            border: none; border-radius: 5px; cursor: pointer; color: white;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn-start { background-color: #28a745; }
+        .btn-start:hover { background-color: #218838; }
+        .btn-stop { background-color: #dc3545; }
+        .btn-stop:hover { background-color: #c82333; }
+
+        /* --- Weekly Programs Styling (Unchanged) --- */
+        .program-controls h2 { text-align: center; color: #444; margin-top: 0; margin-bottom: 20px; }
+        .program-block {
+            border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 20px;
+        }
+        .program-block h3 {
+            margin-top: 0; color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px;
+        }
+        .program-inputs-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
+            align-items: center; margin-bottom: 15px;
+        }
+        .program-inputs-grid .input-group { width: 100%; }
+        .program-inputs-grid label {
+            display: block; font-weight: bold; color: #555; margin-bottom: 5px;
+        }
+        .program-input-field {
+            width: 100%; padding: 10px; font-size: 1.1rem; border: 1px solid #ccc;
+            border-radius: 5px; box-sizing: border-box;
+        }
+
+        .status-control fieldset { border: 1px solid #ddd; border-radius: 5px; padding: 10px 15px; }
+        .status-control legend { font-weight: bold; color: #555; padding: 0 5px; }
+        .radio-group {
+            display: flex; justify-content: space-around; flex-wrap: wrap; gap: 10px;
+        }
+        .radio-group label { cursor: pointer; font-weight: normal; }
+        .radio-group input[type="radio"] { margin-left: 5px; cursor: pointer; }
+        
+        @media (max-width: 480px) {
+            .program-inputs-grid { grid-template-columns: 1fr; }
+        }
+
+        /* --- Log Styling (Unchanged) --- */
+        .log-container {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .log-container h2 {
+            text-align: center;
+            color: #444;
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        #logList {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.95rem;
+            max-height: 200px;
+            overflow-y: auto;
+            direction: ltr;
+            text-align: left;
+        }
+        #logList li {
+            padding: 8px;
+            border-bottom: 1px dotted #eee;
+            white-space: pre-wrap;
+        }
+        #logList li:nth-child(even) {
+            background-color: #f1f1f1;
+        }
+        #logList li:last-child {
+            border-bottom: none;
+            font-weight: bold;
+            color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="boiler-control-container">
+        <h1>בקרת דוד</h1>
+        
+            <div class="gauge-container">
+            <div class="gauge-fill" id="gaugeFill"></div> 
+            <div class="target-marker" id="targetMarker" style="display:none;"></div> 
+            <div class="gauge-text" id="gaugeText">
+                --°C
+            </div>
+        </div>
+
+        <hr class="separator">
+
+        <div class="manual-controls">
+            <h2>הפעלה מיידית</h2>
+            
+            <div class="form-group">
+                <label for="targetTempInput">טמפרטורה:</label>
+                <input type="number" id="targetTempInput" min="35" max="60" value="50">
+            </div>
+            
+            <div class="button-group">
+                <button id="startHeatBtn" class="btn btn-start">הפעלה</button>
+                <button id="stopHeatBtn" class="btn btn-stop">הפסקה</button>
+            </div>
+        </div>
+
+        <hr class="separator">
+        
+        <div class="program-controls">
+            <h2>תוכניות שבועיות</h2>
+
+            <div class="program-block">
+                <h3>תוכנית 1</h3>
+                <div class="program-inputs-grid">
+                    <div class="input-group">
+                        <label for="prog1-time">התחלה:</label>
+                        <input type="time" id="prog1-time" value="06:00" class="program-input-field program-data-input" data-program-id="1">
+                    </div>
+                    <div class="input-group">
+                        <label for="prog1-temp">טמפרטורה:</label>
+                        <input type="number" id="prog1-temp" min="35" max="60" value="50" class="program-input-field program-data-input" data-program-id="1">
+                    </div>
+                </div>
+                <div class="status-control">
+                    <fieldset>
+                        <legend>מצב</legend>
+                        <div class="radio-group">
+                            <label><input type="radio" name="prog1-status" class="program-status-radio" data-program-id="1" value="off" checked> כבוי</label>
+                            <label><input type="radio" name="prog1-status" class="program-status-radio" data-program-id="1" value="active"> פעיל</label>
+                            <label><input type="radio" name="prog1-status" class="program-status-radio" data-program-id="1" value="once"> חד-פעמי</label>
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+
+            <div class="program-block">
+                <h3>תוכנית 2</h3>
+                <div class="program-inputs-grid">
+                    <div class="input-group">
+                        <label for="prog2-time">התחלה:</label>
+                        <input type="time" id="prog2-time" value="17:30" class="program-input-field program-data-input" data-program-id="2">
+                    </div>
+                    <div class="input-group">
+                        <label for="prog2-temp">טמפרטורה:</label>
+                        <input type="number" id="prog2-temp" min="35" max="60" value="55" class="program-input-field program-data-input" data-program-id="2">
+                    </div>
+                </div>
+                <div class="status-control">
+                    <fieldset>
+                        <legend>מצב</legend>
+                        <div class="radio-group">
+                            <label><input type="radio" name="prog2-status" class="program-status-radio" data-program-id="2" value="off" checked> כבוי</label>
+                            <label><input type="radio" name="prog2-status" class="program-status-radio" data-program-id="2" value="active"> פעיל</label>
+                            <label><input type="radio" name="prog2-status" class="program-status-radio" data-program-id="2" value="once"> חד-פעמי</label>
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+
+            <div class="program-block">
+                <h3>תוכנית 3</h3>
+                <div class="program-inputs-grid">
+                    <div class="input-group">
+                        <label for="prog3-time">התחלה:</label>
+                        <input type="time" id="prog3-time" value="21:00" class="program-input-field program-data-input" data-program-id="3">
+                    </div>
+                    <div class="input-group">
+                        <label for="prog3-temp">טמפרטורה:</label>
+                        <input type="number" id="prog3-temp" min="35" max="60" value="45" class="program-input-field program-data-input" data-program-id="3">
+                    </div>
+                </div>
+                <div class="status-control">
+                    <fieldset>
+                        <legend>מצב</legend>
+                        <div class="radio-group">
+                            <label><input type="radio" name="prog3-status" class="program-status-radio" data-program-id="3" value="off" checked> כבוי</label>
+                            <label><input type="radio" name="prog3-status" class="program-status-radio" data-program-id="3" value="active"> פעיל</label>
+                            <label><input type="radio" name="prog3-status" class="program-status-radio" data-program-id="3" value="once"> חד-פעמי</label>
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+        </div>
+
+        <hr class="separator">
+
+        <div class="log-container">
+            <h2>יומן אירועים (Log) 📝</h2>
+            <ul id="logList">
+                </ul>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Initialize gauge and logging UI
+         * MQTT handlers and event binding delegated to ui.js
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Gauge Logic with Target Marker ---
+            const MIN_TEMP = 10, MAX_TEMP = 70, TEMP_RANGE = MAX_TEMP - MIN_TEMP;
+            const gaugeFill = document.getElementById('gaugeFill');
+            const targetMarker = document.getElementById('targetMarker');
+            const gaugeText = document.getElementById('gaugeText');
+
+            // Global function called by ui.js to update gauge from MQTT messages
+            window.updateBoilerStatus = (currentTemp, targetTemp, isHeating) => {
+                const clampedCurrent = Math.max(MIN_TEMP, Math.min(MAX_TEMP, currentTemp));
+                const currentPercent = ((clampedCurrent - MIN_TEMP) / TEMP_RANGE) * 100;
+                
+                const clampedTarget = Math.max(MIN_TEMP, Math.min(MAX_TEMP, targetTemp));
+                const targetPercent = ((clampedTarget - MIN_TEMP) / TEMP_RANGE) * 100;
+
+                gaugeFill.style.width = `${currentPercent}%`;
+                targetMarker.style.left = `calc(${targetPercent}% - 1px)`; 
+                // Show target marker only when heating AND a target has been received
+                const hasTarget = window.hasTargetTemp === true;
+                targetMarker.style.display = (isHeating && hasTarget) ? 'block' : 'none';
+
+                let text = `${Math.round(currentTemp)}°C`;
+                if (isHeating && hasTarget && window.latestTargetTemp != null) {
+                    text += ` (יעד: ${Math.round(window.latestTargetTemp)}°C)`;
+                }
+                gaugeText.textContent = text;
+
+                gaugeFill.classList.toggle('heating-active', isHeating);
+            };
+
+            // Initialize gauge with default values
+            setTimeout(() => { updateBoilerStatus(35, 50, false); }, 500);
+        });
+    </script>
+
+</body>
+</html>

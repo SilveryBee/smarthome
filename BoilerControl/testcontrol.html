@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boiler Test Control</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+    <script>
+        // Provide buffering stubs so webio_mqtt.js can safely call these before the UI is ready.
+        // Messages received early will be saved and flushed once the DOM UI is available.
+        window.__earlyLogQueue = window.__earlyLogQueue || [];
+        window.__earlyLogCleared = window.__earlyLogCleared || false;
+        window.logAppend = window.logAppend || function(msg) { window.__earlyLogQueue.push(msg); };
+        window.logClear = window.logClear || function() { window.__earlyLogQueue = []; window.__earlyLogCleared = true; };
+    </script>
+    <script src="webio_mqtt.js" type="text/javascript"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f4; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
+        .card { background:#fff; padding:20px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.08); width:100%; max-width:420px; }
+        h1 { margin:0 0 16px 0; font-size:1.25rem; text-align:center }
+        .form-group { margin-bottom:12px }
+        label { display:block; margin-bottom:6px; font-weight:600 }
+        input[type=number] { width:100%; padding:10px; font-size:1rem; border:1px solid #ccc; border-radius:6px; box-sizing:border-box }
+        .btn { display:inline-block; padding:10px 14px; font-size:1rem; border-radius:6px; border:none; cursor:pointer }
+        .btn-send { background:#007bff; color:#fff }
+        .status { margin-top:12px; font-size:0.95rem; color:#333 }
+    .hint { margin-top:8px; font-size:0.85rem; color:#666 }
+          /* Feedback area: fixed-size values to avoid resizing the page
+              Use block layout instead of flex to avoid flex-induced layout shifts */
+                    /* Feedback area: use stacked rows to avoid overlap and layout issues */
+                    .feedback { margin-top:12px; display:block; width:100%; min-height:96px; }
+                    .feedback-row { display:block; width:100%; box-sizing:border-box; margin:6px 0; }
+                      .feedback-label { display:inline-block; font-weight:700; margin-right:8px; vertical-align:middle; }
+                      /* Allow values to wrap to multiple lines (up to ~2 lines) so longer messages are visible without cutting too much */
+                      .feedback .value { display:block; width:100%; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:normal; direction:ltr; max-height:48px; line-height:1.2em; }
+
+                /* Responsive adjustments */
+                @media (max-width:420px) {
+                        .feedback .value { width:100%; max-height:40px; line-height:1.2em; }
+                }
+        /* Button-row styles (non-flex) */
+    .button-row { margin-top:8px; /* contain floats and keep normal flow */ overflow:auto; margin-bottom:8px; }
+    .button-row .btn { display:inline-block; margin-right:10px; }
+    .button-row .clear-btn { /* avoid float to prevent overlap; align right using auto margin */ margin-left: auto; display:inline-block; }
+        /* Log styling (similar to boilercontrol.html) */
+    .log-container { margin-top:28px; padding:12px; background-color:#f9f9f9; border:1px solid #ddd; border-radius:8px; clear:both; }
+        .log-header { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:8px; margin-bottom:8px; }
+        .log-container h2 { margin:0; font-size:1rem; color:#444; border-bottom:none; padding-bottom:0; }
+        .clear-btn { font-size: 0.85rem; padding: 4px 10px; margin:0; }
+        #logList { list-style:none; padding:0; margin:0; font-size:0.9rem; max-height:160px; overflow-y:auto; direction:ltr; text-align:left; }
+        #logList li { padding:6px 8px; border-bottom:1px dotted #eee; white-space:pre-wrap; }
+        #logList li:nth-child(even) { background-color:#f1f1f1 }
+        #logList li:last-child { border-bottom:none; font-weight:600; color:#0056b3 }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Test: Set Simulated Temperature</h1>
+        <div class="form-group">
+            <label for="simTemp">Temperature (°C)</label>
+            <input id="simTemp" type="number" min="0" max="255" value="45">
+        </div>
+        <div class="button-row">
+            <button id="sendBtn" class="btn btn-send">Send</button>
+        </div>
+        <div class="status" id="status">Connecting to MQTT broker...</div>
+        <div class="hint">This page will publish a single-byte message to the topic <code>heater.settesttemp</code> which the device interprets as the simulated temperature.</div>
+
+        <div class="feedback">
+            <div class="feedback-row"><span class="feedback-label">Last sent:</span> <span id="lastSent" class="value" title="-">-</span></div>
+            <div class="feedback-row"><span class="feedback-label">Last received:</span> <span id="lastReceived" class="value" title="-">-</span></div>
+        </div>
+
+        <div class="log-container" aria-live="polite">
+            <div class="log-header">
+                <h2>Message Log</h2>
+                <button id="clearLogBtn" class="btn clear-btn">Clear</button>
+            </div>
+            <ul id="logList"></ul>
+        </div>
+    </div>
+
+    <script>
+        // Track last published message to avoid treating our own publishes as incoming
+        window.__lastPublished = { topic: null, payload: null, ts: 0 };
+        // Wait until mqttClient (from webio_mqtt.js) is initialized
+        function updateConnectionStatus() {
+            const s = document.getElementById('status');
+            if (typeof mqttClient !== 'undefined' && mqttClient.isConnected && mqttClient.isConnected()) {
+                s.textContent = 'Connected to MQTT broker';
+            } else {
+                s.textContent = 'Not connected';
+            }
+        }
+
+        // Helper to send a single-byte numeric payload (Uint8Array) which the Arduino expects
+        function sendSimulatedTempByte(val) {
+            // Clamp to 0..255
+            const v = Math.max(0, Math.min(255, Math.round(val)));
+            const payload = new Uint8Array([v]).buffer;
+            const message = new Paho.MQTT.Message(payload);
+            message.destinationName = 'heater/command/settesttemp';
+            mqttClient.send(message);
+            // record published payload for echo filtering
+            window.__lastPublished = { topic: message.destinationName, payload: String(v), ts: Date.now() };
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const sendBtn = document.getElementById('sendBtn');
+            const simInput = document.getElementById('simTemp');
+            const status = document.getElementById('status');
+
+            sendBtn.addEventListener('click', function() {
+                const v = parseInt(simInput.value, 10);
+                if (isNaN(v)) { alert('Enter a valid number'); return; }
+                if (typeof mqttClient === 'undefined') { alert('MQTT client not available'); return; }
+                sendSimulatedTempByte(v);
+                const ts = new Date().toLocaleTimeString();
+                status.textContent = 'Sent single-byte value ' + v + ' to heater.settesttemp';
+                const lastSent = document.getElementById('lastSent');
+                if (lastSent) {
+                    lastSent.textContent = v + ' at ' + ts;
+                    lastSent.title = String(v) + ' at ' + ts;
+                }
+            });
+
+            // Poll connection status briefly until connected
+            const interval = setInterval(function() {
+                if (typeof mqttClient !== 'undefined') {
+                    try {
+                        if (mqttClient.isConnected && mqttClient.isConnected()) {
+                            status.textContent = 'Connected to MQTT broker';
+                            clearInterval(interval);
+                            return;
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+                updateConnectionStatus();
+            }, 500);
+
+            // Global log helpers used by webio_mqtt.js
+            window.logAppend = function(msg) {
+                try {
+                    const ul = document.getElementById('logList');
+                    if (!ul) return;
+                    const li = document.createElement('li');
+                    const ts = new Date().toLocaleTimeString();
+                    li.textContent = ts + ' - ' + msg;
+                    ul.appendChild(li);
+                    // Keep scroll at bottom
+                    ul.scrollTop = ul.scrollHeight;
+                } catch (e) {
+                    console.error('logAppend error', e);
+                }
+            };
+
+            window.logClear = function() {
+                const ul = document.getElementById('logList');
+                if (ul) ul.innerHTML = '';
+            };
+
+            // Flush any early-arrived log messages that were buffered before the UI was ready
+            try {
+                if (window.__earlyLogCleared) {
+                    window.logClear();
+                }
+                if (window.__earlyLogQueue && window.__earlyLogQueue.length) {
+                    window.__earlyLogQueue.forEach(function(m){ window.logAppend(m); });
+                    window.__earlyLogQueue = [];
+                }
+            } catch (e) { /* ignore */ }
+
+            // Wire Clear button to logClear
+            const clearBtn = document.getElementById('clearLogBtn');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function() {
+                    if (window.logClear) window.logClear();
+                });
+            }
+
+            // Wrap the MQTT message handler so we can update lastReceived without breaking existing flow
+            (function attachMessageProbe() {
+                function tryAttach() {
+                    if (typeof mqttClient !== 'undefined' && mqttClient.onMessageArrived) {
+                        const orig = mqttClient.onMessageArrived;
+                        mqttClient.onMessageArrived = function(message) {
+                            try {
+                                // Call original handler first
+                                orig(message);
+                            } catch (e) {
+                                try { orig.call(mqttClient, message); } catch (e2) { /* swallow */ }
+                            }
+                            try {
+                                let payload = '';
+                                if (typeof message.payloadString === 'string' && message.payloadString.length > 0) {
+                                    payload = message.payloadString;
+                                } else if (message.payloadBytes && message.payloadBytes.length) {
+                                    // Convert bytes to hex or printable where possible
+                                    try {
+                                        // If single byte, print numeric
+                                        if (message.payloadBytes.length === 1) {
+                                            payload = String(message.payloadBytes[0]);
+                                        } else {
+                                            payload = Array.prototype.map.call(message.payloadBytes, function(b){ return ('0'+b.toString(16)).slice(-2); }).join(' ');
+                                        }
+                                    } catch (e) { payload = '[binary]'; }
+                                }
+                                // Simple echo-filter: if this client just published the same topic/payload, ignore updating lastReceived
+                                const lastRec = document.getElementById('lastReceived');
+                                const isEcho = (window.__lastPublished && window.__lastPublished.topic === message.destinationName && window.__lastPublished.payload === payload && (Date.now() - window.__lastPublished.ts) < 1500);
+                                if (!isEcho) {
+                                    if (lastRec) {
+                                        const full = message.destinationName + ' : ' + payload;
+                                        lastRec.textContent = full;
+                                        lastRec.title = full;
+                                    }
+                                } else {
+                                    // Optionally mark as echo in lastSent tooltip
+                                    const lastSent = document.getElementById('lastSent');
+                                    if (lastSent) {
+                                        lastSent.title = (lastSent.title || '') + ' (echo received)';
+                                    }
+                                }
+                            } catch (e) { /* ignore */ }
+                        };
+                    } else {
+                        setTimeout(tryAttach, 250);
+                    }
+                }
+                tryAttach();
+            })();
+        });
+    </script>
+</body>
+</html>

@@ -15,8 +15,8 @@ window.hasTargetTemp = false;
 window.latestTargetTemp = null;
 
 // UI temp bounds (used for marker position calculations)
-const UI_MIN_TEMP = 10;
-const UI_MAX_TEMP = 70;
+const UI_MIN_TEMP = 0;
+const UI_MAX_TEMP = 90;
 const UI_TEMP_RANGE = UI_MAX_TEMP - UI_MIN_TEMP;
 
 /**
@@ -39,7 +39,7 @@ window.setTargetTemp = function(tgt) {
         if (marker) {
             const clampedTarget = Math.max(UI_MIN_TEMP, Math.min(UI_MAX_TEMP, parsed));
             const targetPercent = ((clampedTarget - UI_MIN_TEMP) / UI_TEMP_RANGE) * 100;
-            marker.style.left = `calc(${targetPercent}% - 1px)`;
+            marker.style.right = `calc(${targetPercent}% - 1.5px)`;
             const heatingActive = gaugeFill && gaugeFill.classList.contains('heating-active');
             marker.style.display = (heatingActive && window.hasTargetTemp) ? 'block' : 'none';
         }
@@ -78,16 +78,8 @@ const stateValues = {
  * Updates the gauge with current temperature
  */
 function setCurrentTempValue(value) {
-    // Get current target from display if available
-    const gaugeText = document.getElementById('gaugeText');
-    const currentText = gaugeText ? gaugeText.textContent : '';
-    
-    // Extract target temp from "XX°C (יעד: YY°C)" format
-    let targetTemp = 50;
-    const targetMatch = currentText.match(/יעד:\s*(\d+)/);
-    if (targetMatch) {
-        targetTemp = parseInt(targetMatch[1]);
-    }
+    // Use global state for target temp
+    let targetTemp = window.latestTargetTemp !== null ? window.latestTargetTemp : 50;
     
     // Get heating state
     const gaugeFill = document.getElementById('gaugeFill');
@@ -208,8 +200,6 @@ function restoreSettings(buffer) {
         } catch (e) {
             console.warn('Could not restore immediate program temp:', e);
         }
-
-        addToLog(`הגדרות שוחזרו בהצלחה.`);
     } catch (e) {
         console.error('Error restoring settings:', e);
     }
@@ -354,7 +344,7 @@ function sendImmediateTemp() {
         message.destinationName = "heater/command/settemp";
         mqttClient.send(message);
         console.log(`Sent immediate program temp: prog=${immProgId} temp=${immediateTempVal}`);
-        addToLog(`שליחת טמפרטורת מיידית: ${immediateTempVal}°C (תוכנית ${immProgId})`);
+        addToLog(`התחלה מיידית: ${immediateTempVal}°C (תוכנית ${immProgId})`);
     } catch (e) {
         console.error('Failed to send immediate temp:', e);
     }

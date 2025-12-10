@@ -55,7 +55,7 @@
             height: 100%;
             background-color: #e74c3c; 
             z-index: 5; 
-            transition: left 0.5s ease; 
+            transition: right 0.5s ease; 
             box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
         }
 
@@ -69,6 +69,7 @@
             font-size: 1.2rem;
             text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.4); 
             white-space: nowrap;
+            z-index: 10;
         }
         .gauge-text small {
             display: none; 
@@ -139,6 +140,12 @@
             background-color: #f9f9f9;
             border: 1px solid #ddd;
             border-radius: 8px;
+            /* Fixed size so incoming messages don't resize the page */
+            height: 200px;
+            box-sizing: border-box;
+            overflow: hidden;
+            width: 100%;
+            max-width: 100%;
         }
         .log-container h2 {
             text-align: center;
@@ -152,15 +159,25 @@
             padding: 0;
             margin: 0;
             font-size: 0.95rem;
-            max-height: 200px;
+            height: 100%;
             overflow-y: auto;
             direction: ltr;
             text-align: left;
+            box-sizing: border-box;
+            /* prevent horizontal overflow */
+            max-width: 100%;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
         #logList li {
             padding: 8px;
             border-bottom: 1px dotted #eee;
             white-space: pre-wrap;
+            /* ensure long tokens wrap instead of expanding container */
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            max-width: 100%;
+            box-sizing: border-box;
         }
         #logList li:nth-child(even) {
             background-color: #f1f1f1;
@@ -175,7 +192,7 @@
 <body>
 
     <div class="boiler-control-container">
-        <h1>בקרת דוד</h1>
+        <h1>מים חמים</h1>
         
             <div class="gauge-container">
             <div class="gauge-fill" id="gaugeFill"></div> 
@@ -204,7 +221,7 @@
         <hr class="separator">
         
         <div class="program-controls">
-            <h2>תוכניות שבועיות</h2>
+            <h2>תוכניות יומיות</h2>
 
             <div class="program-block">
                 <h3>תוכנית 1</h3>
@@ -295,7 +312,7 @@
          */
         document.addEventListener('DOMContentLoaded', () => {
             // --- Gauge Logic with Target Marker ---
-            const MIN_TEMP = 10, MAX_TEMP = 70, TEMP_RANGE = MAX_TEMP - MIN_TEMP;
+            const MIN_TEMP = 0, MAX_TEMP = 90, TEMP_RANGE = MAX_TEMP - MIN_TEMP;
             const gaugeFill = document.getElementById('gaugeFill');
             const targetMarker = document.getElementById('targetMarker');
             const gaugeText = document.getElementById('gaugeText');
@@ -309,7 +326,7 @@
                 const targetPercent = ((clampedTarget - MIN_TEMP) / TEMP_RANGE) * 100;
 
                 gaugeFill.style.width = `${currentPercent}%`;
-                targetMarker.style.left = `calc(${targetPercent}% - 1px)`; 
+                targetMarker.style.right = `calc(${targetPercent}% - 1.5px)`; 
                 // Show target marker only when heating AND a target has been received
                 const hasTarget = window.hasTargetTemp === true;
                 targetMarker.style.display = (isHeating && hasTarget) ? 'block' : 'none';

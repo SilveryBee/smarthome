@@ -11,6 +11,9 @@ const FLOW_RATE_MAX = 10;    // L/min (maximum expected flow rate)
 // SVG circle circumference (2 * PI * radius, where radius = 52)
 const CIRCLE_CIRCUMFERENCE = 327;
 
+// Track last known SSID to detect changes
+let lastSsid = null;
+
 /**
  * Initialize UI when DOM is loaded
  */
@@ -100,7 +103,7 @@ window.setOnlineStatus = function(online) {
     }
     
     if (statusText) {
-        statusText.textContent = online ? 'ESP Online' : 'ESP Offline';
+        statusText.textContent = online ? (lastSsid ? `ESP Online | ${lastSsid}` : 'ESP Online') : 'ESP Offline';
     }
     
     // Enable/disable controls based on connection
@@ -156,6 +159,17 @@ window.updatePondState = function(state) {
         console.log("Total flow:", state.totalFlow, "L");
     }
     
+    // Update SSID in status bar and log if changed
+    if (state.ssid !== undefined && state.ssid !== lastSsid) {
+        lastSsid = state.ssid;
+        const timestamp = new Date().toLocaleTimeString();
+        logAppend(`[${timestamp}] Connected to WiFi: ${state.ssid}`);
+        const statusText = document.getElementById('statusText');
+        if (statusText && statusText.textContent.startsWith('ESP Online')) {
+            statusText.textContent = `ESP Online | ${state.ssid}`;
+        }
+    }
+
     // Log state update
     const timestamp = new Date().toLocaleTimeString();
     logAppend(`[${timestamp}] State updated: Level=${state.waterLevel}, Valve=${state.valveOpen ? 'OPEN' : 'CLOSED'}, Flow=${state.flowRate || 0}L/min`);

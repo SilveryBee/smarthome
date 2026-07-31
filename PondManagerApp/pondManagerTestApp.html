@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pond Manager Test Control</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+    <script>
+        // MQTT Configuration (same as pondmanager_mqtt.js)
+        var hostname = "542eae39098649348d20f0029dc1ac86.s1.eu.hivemq.cloud";
+        var port = 8884;
+        var clientId = "pondtest_" + new Date().getUTCMilliseconds();
+        var username = "polaris";
+        var password = "84jdF8fGF95";
+        var subscription = "pondmanager/#";
+
+        // Create MQTT client
+        var mqttClient = null;
+        var isSimulationActive = false;
+
+        // Initialize MQTT connection
+        function initMQTT() {
+            mqttClient = new Paho.MQTT.Client(hostname, port, clientId);
+            mqttClient.onMessageArrived = onMessageArrived;
+            mqttClient.onConnectionLost = onConnectionLost;
+            
+            mqttClient.connect({
+                onSuccess: onConnected,
+                onFailure: onConnectionFailed,
+                keepAliveInterval: 10,
+                userName: username,
+                useSSL: true,
+                password: password
+            });
+        }
+
+        function onConnected() {
+            console.log("Connected to MQTT broker!");
+            mqttClient.subscribe(subscription);
+            updateConnectionStatus(true);
+            logAppend("Connected to MQTT broker");
+        }
+
+        function onConnectionFailed(res) {
+            console.log("Connection failed: " + res.errorMessage);
+            updateConnectionStatus(false);
+            logAppend("Connection failed: " + res.errorMessage);
+        }
+
+        function onConnectionLost(res) {
+            if (res.errorCode != 0) {
+                console.log("Connection lost: " + res.errorMessage);
+                updateConnectionStatus(false);
+                logAppend("Connection lost: " + res.errorMessage);
+                // Attempt reconnection
+                setTimeout(initMQTT, 5000);
+            }
+        }
+
+        function onMessageArrived(message) {
+            console.log(message.destinationName + " : " + message.payloadString);
+            
+            // Log received messages
+            var topic = message.destinationName.split("/");
+            if (topic[0] === "pondmanager") {
+                logAppend("← " + message.destinationName + ": " + message.payloadString);
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('status');
+            if (status) {
+                status.textContent = connected ? 'Connected to MQTT broker' : 'Not connected';
+                status.style.color = connected ? '#28a745' : '#dc3545';
+            }
+        }
+
+        // Send simulation control
+        function sendSimulationControl(active) {
+            if (!mqttClient || !mqttClient.isConnected()) {
+                logAppend("ERROR: Not connected to MQTT");
+                return false;
+            }
+            
+            var payload = JSON.stringify({ simulation: active });
+            var message = new Paho.MQTT.Message(payload);
+            message.destinationName = "pondmanager/test/control";
+            mqttClient.send(message);
+            
+            logAppend("→ Simulation " + (active ? "ENABLED" : "DISABLED"));
+            isSimulationActive = active;
+            return true;
+        }
+
+        // Send simulated water level
+        function sendSimulatedWaterLevel(distanceCm) {
+            if (!mqttClient || !mqttClient.isConnected()) {
+                logAppend("ERROR: Not connected to MQTT");
+                return;
+            }
+            
+            var payload = JSON.stringify({ waterLevel: parseFloat(distanceCm) });
+            var message = new Paho.MQTT.Message(payload);
+            message.destinationName = "pondmanager/test/sensor";
+            mqttClient.send(message);
+            
+            logAppend("→ Water level set to " + distanceCm + " cm");
+        }
+
+        // Send simulated flow rate
+        function sendSimulatedFlow(flowRate) {
+            if (!mqttClient || !mqttClient.isConnected()) {
+                logAppend("ERROR: Not connected to MQTT");
+                return;
+            }
+            
+            var payload = JSON.stringify({ flowRate: parseFloat(flowRate) });
+            var message = new Paho.MQTT.Message(payload);
+            message.destinationName = "pondmanager/test/flow";
+            mqttClient.send(message);
+            
+            logAppend("→ Flow rate set to " + flowRate + " L/min");
+        }
+
+        // Log helper
+        function logAppend(msg) {
+            try {
+                const ul = document.getElementById('logList');
+                if (!ul) return;
+                const li = document.createElement('li');
+                const ts = new Date().toLocaleTimeString();
+                li.textContent = ts + ' - ' + msg;
+                ul.appendChild(li);
+                
+                // Keep only last 100 messages
+                while (ul.children.length > 100) {
+                    ul.removeChild(ul.firstChild);
+                }
+                
+                // Auto-scroll to bottom
+                ul.scrollTop = ul.scrollHeight;
+            } catch (e) {
+                console.error('logAppend error', e);
+            }
+        }
+
+        function logClear() {
+            const ul = document.getElementById('logList');
+            if (ul) ul.innerHTML = '';
+            logAppend("Log cleared");
+        }
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .card {
+            background: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 1.4rem;
+            text-align: center;
+            color: #333;
+        }
+        .status {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        
+        /* Simulation Control Section */
+        .simulation-control {
+            background-color: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 25px;
+        }
+        .simulation-control h2 {
+            margin: 0 0 12px 0;
+            font-size: 1.1rem;
+            color: #856404;
+        }
+        .toggle-button {
+            width: 100%;
+            padding: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .toggle-button.inactive {
+            background-color: #6c757d;
+            color: white;
+        }
+        .toggle-button.active {
+            background-color: #28a745;
+            color: white;
+        }
+        .toggle-button:hover {
+            opacity: 0.9;
+        }
+        .toggle-button:active {
+            transform: scale(0.98);
+        }
+        
+        /* Sensor Simulation Section */
+        .sensor-section {
+            background-color: #e7f3ff;
+            border: 1px solid #bee5eb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .sensor-section h2 {
+            margin: 0 0 15px 0;
+            font-size: 1rem;
+            color: #004085;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #555;
+        }
+        input[type=number],
+        input[type=range] {
+            width: 100%;
+            padding: 10px;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        input[type=range] {
+            padding: 0;
+            height: 40px;
+        }
+        .value-display {
+            display: inline-block;
+            margin-left: 10px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 16px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        .btn-send {
+            background: #007bff;
+            color: #fff;
+            width: 100%;
+        }
+        .btn-send:hover {
+            background: #0056b3;
+        }
+        .btn-send:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .hint {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            color: #666;
+            font-style: italic;
+        }
+        
+        /* Log Container */
+        .log-container {
+            margin-top: 25px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+        .log-container h2 {
+            margin: 0;
+            font-size: 1rem;
+            color: #444;
+        }
+        .btn-clear {
+            font-size: 0.85rem;
+            padding: 6px 12px;
+            background: #dc3545;
+            color: white;
+        }
+        .btn-clear:hover {
+            background: #c82333;
+        }
+        #logList {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.9rem;
+            max-height: 250px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+        }
+        #logList li {
+            padding: 6px 8px;
+            border-bottom: 1px dotted #eee;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        #logList li:nth-child(even) {
+            background-color: #f1f1f1;
+        }
+        #logList li:last-child {
+            font-weight: 600;
+            color: #0056b3;
+        }
+        
+        /* Responsive */
+        @media (max-width: 480px) {
+            .card {
+                padding: 15px;
+            }
+            h1 {
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🧪 Pond Manager Test Control</h1>
+        
+        <div class="status" id="status">Connecting to MQTT broker...</div>
+        
+        <!-- Simulation Control -->
+        <div class="simulation-control">
+            <h2>⚙️ Simulation Control</h2>
+            <button id="toggleSimBtn" class="toggle-button inactive" onclick="toggleSimulation()">
+                START SIMULATION
+            </button>
+            <div class="hint">
+                When active, the ESP will use simulated sensor data instead of real sensors.
+            </div>
+        </div>
+        
+        <!-- Water Level Simulation -->
+        <div class="sensor-section">
+            <h2>💧 Water Level Simulator</h2>
+            <div class="form-group">
+                <label for="waterLevelInput">
+                    Distance from Sensor (cm):
+                    <span class="value-display" id="waterLevelValue">35</span>
+                </label>
+                <input type="range" id="waterLevelSlider" min="5" max="70" value="35" step="1">
+            </div>
+            <button id="sendWaterLevelBtn" class="btn btn-send" onclick="sendWaterLevel()">
+                Send Water Level
+            </button>
+            <div class="hint">
+                Lower distance = fuller tank (5cm = 100% full, 70cm = 0% empty)
+            </div>
+        </div>
+        
+        <!-- Flow Rate Simulation -->
+        <div class="sensor-section">
+            <h2>🌊 Flow Rate Simulator</h2>
+            <div class="form-group">
+                <label for="flowRateInput">
+                    Flow Rate (L/min):
+                    <span class="value-display" id="flowRateValue">0.0</span>
+                </label>
+                <input type="range" id="flowRateSlider" min="0" max="10" value="0" step="0.1">
+            </div>
+            <button id="sendFlowBtn" class="btn btn-send" onclick="sendFlow()">
+                Send Flow Rate
+            </button>
+            <div class="hint">
+                Simulates water flow through the valve (0 = no flow, 10 = max flow)
+            </div>
+        </div>
+        
+        <!-- Log Container -->
+        <div class="log-container">
+            <div class="log-header">
+                <h2>📝 Message Log</h2>
+                <button class="btn btn-clear" onclick="logClear()">Clear</button>
+            </div>
+            <ul id="logList"></ul>
+        </div>
+    </div>
+
+    <script>
+        // Initialize MQTT on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            initMQTT();
+            
+            // Setup slider value displays
+            const waterLevelSlider = document.getElementById('waterLevelSlider');
+            const waterLevelValue = document.getElementById('waterLevelValue');
+            const flowRateSlider = document.getElementById('flowRateSlider');
+            const flowRateValue = document.getElementById('flowRateValue');
+            
+            waterLevelSlider.addEventListener('input', function() {
+                waterLevelValue.textContent = this.value;
+            });
+            
+            flowRateSlider.addEventListener('input', function() {
+                flowRateValue.textContent = parseFloat(this.value).toFixed(1);
+            });
+        });
+        
+        function toggleSimulation() {
+            const btn = document.getElementById('toggleSimBtn');
+            const newState = !isSimulationActive;
+            
+            if (sendSimulationControl(newState)) {
+                isSimulationActive = newState;
+                
+                if (isSimulationActive) {
+                    btn.textContent = 'STOP SIMULATION';
+                    btn.classList.remove('inactive');
+                    btn.classList.add('active');
+                } else {
+                    btn.textContent = 'START SIMULATION';
+                    btn.classList.remove('active');
+                    btn.classList.add('inactive');
+                }
+            }
+        }
+        
+        function sendWaterLevel() {
+            const slider = document.getElementById('waterLevelSlider');
+            sendSimulatedWaterLevel(slider.value);
+        }
+        
+        function sendFlow() {
+            const slider = document.getElementById('flowRateSlider');
+            sendSimulatedFlow(slider.value);
+        }
+    </script>
+</body>
+</html>

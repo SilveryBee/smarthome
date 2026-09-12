@@ -113,6 +113,11 @@ function MessageArrived(message) {
                     window.logAppend("ERROR: " + message.payloadString);
                 }
                 break;
+
+            case "command":
+            case "test":
+                // Outgoing/test messages received on wildcard subscription - ignore silently
+                break;
                 
             default:
                 console.log("Unknown topic destination:", dest);

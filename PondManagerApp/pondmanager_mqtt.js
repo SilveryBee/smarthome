@@ -19,6 +19,19 @@ mqttClient.onConnectionLost = ConnectionLost;
 // Connect on page load
 Connect();
 
+// Automatically refresh state when switching back to this tab
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        if (mqttClient && mqttClient.isConnected()) {
+            console.log("Tab visible: requesting state update");
+            requestStateUpdate();
+        } else {
+            console.log("Tab visible: reconnecting MQTT");
+            Connect();
+        }
+    }
+});
+
 /**
  * Initiates a connection to the MQTT broker
  */

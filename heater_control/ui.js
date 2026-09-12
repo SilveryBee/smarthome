@@ -8,6 +8,8 @@ var timeProg = null;
 var timeHour = null;
 var timeMinute = null;
 var timeTimeOut = null;
+
+var testTemp = null;
 //-------------------------------------------------------------------
 function timeChanged(timePicker) {
 	if (timeTimeOut != null) {
@@ -110,6 +112,21 @@ function setHeatingActive(value) {
 		gauge.querySelector(".gauge__fill").style.background="#0000FF";
 	}
 }
+//-------------------------------------------------------------------
+function setTestTempClicked(btn) {
+	var message = new Paho.MQTT.Message("TestTemp");
+	var ms = new Uint8Array([testTemp]);
+	var message = new Paho.MQTT.Message(ms);
+	message.destinationName = "heater/command/settesttemp";
+	mqttClient.send(message);	
+}
+
+//-------------------------------------------------------------------
+function testTempChanged(input) {
+	console.log("Test Temp changed: "+ input.value);
+	testTemp = input.value;
+}
+//-------------------------------------------------------------------
 
 function logAppend(text) {
 	const logWindow = document.getElementById('LogWindow');

@@ -202,6 +202,19 @@ function sendWaterfallCommand(command) {
 /**
  * Send reset command to ESP
  */
+function sendWaterInterval(minutes) {
+    if (!mqttClient.isConnected()) {
+        console.error("MQTT not connected");
+        if (window.logAppend) window.logAppend("ERROR: MQTT not connected");
+        return;
+    }
+    var payload = JSON.stringify({ waterInterval: parseInt(minutes) });
+    var message = new Paho.MQTT.Message(payload);
+    message.destinationName = "pondmanager/command";
+    mqttClient.send(message);
+    if (window.logAppend) window.logAppend("Water check interval set: " + minutes + " min");
+}
+
 function sendResetCommand() {
     if (!mqttClient.isConnected()) {
         console.error("MQTT not connected");

@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const openWaterfallBtn = document.getElementById('openWaterfallBtn');
     const closeWaterfallBtn = document.getElementById('closeWaterfallBtn');
     const desiredLevelInput = document.getElementById('desiredLevelInput');
+    const waterIntervalInput = document.getElementById('waterIntervalInput');
     
     if (openBtn) {
         openBtn.addEventListener('click', () => {
@@ -73,6 +74,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!isNaN(level)) {
                     sendDesiredLevel(level);
                 }
+            }, 500);
+        });
+    }
+
+    if (waterIntervalInput) {
+        let debounceTimer;
+        waterIntervalInput.addEventListener('change', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const mins = parseInt(waterIntervalInput.value);
+                if (!isNaN(mins) && mins >= 1) sendWaterInterval(mins);
             }, 500);
         });
     }
@@ -151,6 +163,14 @@ window.updatePondState = function(state) {
         const desiredLevelInput = document.getElementById('desiredLevelInput');
         if (desiredLevelInput) {
             desiredLevelInput.value = state.desiredLevel;
+        }
+    }
+
+    // Update water interval input
+    if (state.waterIntervalMin !== undefined) {
+        const waterIntervalInput = document.getElementById('waterIntervalInput');
+        if (waterIntervalInput && document.activeElement !== waterIntervalInput) {
+            waterIntervalInput.value = state.waterIntervalMin;
         }
     }
     

@@ -80,7 +80,16 @@
 			margin: 5px;
 		}
 		</style>
-
+		<style>
+		.div2 {
+			border: 2px outset lightgray;
+			background-color: lightgray;
+			text-align: left;
+			padding: 10px;
+			margin: 5px;
+		}
+		</style>
+		
 		<style type="text/css">
 			body		{font-family: sans-serif;}
 			table		{empty-cells: show;}
@@ -384,16 +393,28 @@
 	      	</div>       	
        	</div>    
        	
-
-		</div>  
-		
-
+      <div class="div2">
+        	<h5>Test</h5>          	
+			<div class="row" align="left">
+		        <div class="col-md-12">
+		          <p>
+		            <button type = "button" name="setTemp" class="btn btn-default" onclick="setTestTempClicked(this)">Set Temp</button>
+		          </p>  	
+		          <table>
+					  <tr>
+					    <th width=20></th>
+					    <th><h6>Temp</h6></th>
+					    <th width=10></th>
+					    <th>
+					    	<input type="number" name="testTemp" min="30" max="50" onchange="testTempChanged(this)">
+					    </th>				    					      								   
+				     </tr>
+					</table>
+		        </div>		        		
+	      	</div>       	
+       	</div>         	
+       	
 		<div id="LogWindow" style="height:120px;width:400px;border:1px solid #ccc;font:16px/26px Courier New, Courier New, Courier New;overflow:auto;">
-		</div>
-
-
-
-
-    	       	
+		</div>  	       	
 	</body>
 </html>

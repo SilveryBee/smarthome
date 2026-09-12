@@ -361,6 +361,11 @@
                 <label for="desiredLevelInput">Desired Water Level (cm from sensor):</label>
                 <input type="number" id="desiredLevelInput" min="5" max="70" value="10" step="1">
             </div>
+
+            <div class="form-group">
+                <label for="waterIntervalInput">Water Check Interval (minutes):</label>
+                <input type="number" id="waterIntervalInput" min="1" max="1440" value="60" step="1">
+            </div>
             
             <div class="button-group">
                 <button id="openValveBtn" class="btn btn-open">Open Valve</button>

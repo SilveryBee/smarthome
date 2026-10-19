@@ -4,20 +4,24 @@
  */
 
 // MQTT Configuration
-var hostname = "542eae39098649348d20f0029dc1ac86.s1.eu.hivemq.cloud";
-var port = 8884;
-var clientId = "pondmanager_" + new Date().getUTCMilliseconds();
-var username = "polaris";
-var password = "84jdF8fGF95";
+// Endpoint: ../common/config.js   Credentials: ../common/auth.js (prompted once)
 var subscription = "pondmanager/#";
+var clientId = "pondmanager_ui_" + Math.random().toString(16).slice(2, 10);
 
-// Create MQTT client
-mqttClient = new Paho.MQTT.Client(hostname, port, clientId);
+// Create MQTT client (constructed but not connected until credentials exist)
+var mqttClient = new Paho.MQTT.Client(
+    MQTT_CONFIG.host, MQTT_CONFIG.port, MQTT_CONFIG.path, clientId);
 mqttClient.onMessageArrived = MessageArrived;
 mqttClient.onConnectionLost = ConnectionLost;
 
-// Connect on page load
-Connect();
+var brokerCreds = null;
+var retryTimer = null;
+
+// Ask for credentials once, then connect
+SmartHomeAuth.require(function (creds) {
+    brokerCreds = creds;
+    Connect();
+});
 
 // Automatically refresh state when switching back to this tab
 document.addEventListener('visibilitychange', () => {
@@ -36,13 +40,18 @@ document.addEventListener('visibilitychange', () => {
  * Initiates a connection to the MQTT broker
  */
 function Connect() {
+    if (!brokerCreds || mqttClient.isConnected()) return;
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+
     mqttClient.connect({
         onSuccess: Connected,
         onFailure: ConnectionFailed,
         keepAliveInterval: 10,
-        userName: username,
-        useSSL: true,
-        password: password
+        userName: brokerCreds.user,
+        password: brokerCreds.pass,
+        useSSL: MQTT_CONFIG.useSSL,
+        cleanSession: true,
+        timeout: 10
     });
 }
 
@@ -66,11 +75,22 @@ function Connected() {
  * Callback for failed connection
  */
 function ConnectionFailed(res) {
-    console.log("Connection failed: " + res.errorMessage + ". Retrying in 5s...");
+    console.log("Connection failed: " + res.errorMessage);
     if (window.setOnlineStatus) {
         window.setOnlineStatus(false);
     }
-    setTimeout(Connect, 5000);
+
+    // 4 = bad username/password, 5 = not authorised: ask again, don't hammer
+    if (res.errorCode === 4 || res.errorCode === 5) {
+        SmartHomeAuth.forget();
+        brokerCreds = null;
+        SmartHomeAuth.require(function (creds) {
+            brokerCreds = creds;
+            Connect();
+        });
+        return;
+    }
+    retryTimer = setTimeout(Connect, 5000);
 }
 
 /**

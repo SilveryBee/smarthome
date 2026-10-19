@@ -1,50 +1,75 @@
-/* 
- * MQTT-WebClient example for Web-IO 4.0
-*/
-var hostname = "542eae39098649348d20f0029dc1ac86.s1.eu.hivemq.cloud";
-var port = 8884;
-var clientId = "542eae39098649348d20f0029dc1ac86";
-clientId += new Date().getUTCMilliseconds();;
-var username = "polaris";
-var password = "84jdF8fGF95";
+/*
+ * Boiler control - MQTT over WebSockets client
+ *
+ * Endpoint comes from ../common/config.js (Cloudflare Tunnel hostname).
+ * Credentials are asked for once by ../common/auth.js and kept in this
+ * browser's localStorage - nothing sensitive lives in this file.
+ */
 var subscription = "heater/#";
+var clientId = "boiler_ui_" + Math.random().toString(16).slice(2, 10);
 
-mqttClient = new Paho.MQTT.Client(hostname, port, clientId);
-mqttClient.onMessageArrived =  MessageArrived;
+// Constructed but not connected: Paho only dials out on connect().
+var mqttClient = new Paho.MQTT.Client(
+    MQTT_CONFIG.host, MQTT_CONFIG.port, MQTT_CONFIG.path, clientId);
+mqttClient.onMessageArrived = MessageArrived;
 mqttClient.onConnectionLost = ConnectionLost;
-Connect();
+
+var brokerCreds = null;
+var retryTimer = null;
+
+SmartHomeAuth.require(function (creds) {
+    brokerCreds = creds;
+    Connect();
+});
 
 /*Initiates a connection to the MQTT broker*/
-function Connect(){
-	mqttClient.connect({
-		onSuccess: Connected,
-		onFailure: ConnectionFailed,
-		keepAliveInterval: 10,
-		userName: username,
-		useSSL: true,
-		password: password	
-	});
+function Connect() {
+    if (!brokerCreds || mqttClient.isConnected()) return;
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+
+    mqttClient.connect({
+        onSuccess: Connected,
+        onFailure: ConnectionFailed,
+        keepAliveInterval: 10,
+        userName: brokerCreds.user,
+        password: brokerCreds.pass,
+        useSSL: MQTT_CONFIG.useSSL,
+        cleanSession: true,
+        timeout: 10
+    });
 }
 
 /*Callback for successful MQTT connection */
 function Connected() {
-  console.log("Connected!");
-  mqttClient.subscribe(subscription);
-  // Send state update request to remote server
-  requestStateUpdate();
+    console.log("Connected!");
+    mqttClient.subscribe(subscription);
+    // Send state update request to remote server
+    requestStateUpdate();
 }
 
 /*Callback for failed connection*/
 function ConnectionFailed(res) {
-	console.log("Connect failed:" + res.errorMessage);
+    console.log("Connect failed:" + res.errorMessage);
+
+    // 4 = bad username/password, 5 = not authorised: ask again, don't hammer
+    if (res.errorCode === 4 || res.errorCode === 5) {
+        SmartHomeAuth.forget();
+        brokerCreds = null;
+        SmartHomeAuth.require(function (creds) {
+            brokerCreds = creds;
+            Connect();
+        });
+        return;
+    }
+    retryTimer = setTimeout(Connect, 5000);
 }
 
 /*Callback for lost connection*/
 function ConnectionLost(res) {
-  if (res.errorCode != 0) {
-	console.log("Connection lost:" + res.errorMessage);
-	Connect();
-  }
+    if (res.errorCode != 0) {
+        console.log("Connection lost:" + res.errorMessage);
+        retryTimer = setTimeout(Connect, 5000);
+    }
 }
 
 /* Callback for incoming message processing */
@@ -93,5 +118,3 @@ function requestStateUpdate() {
 	message.destinationName = "heater/command/state";
 	mqttClient.send(message);    
 }
-
-

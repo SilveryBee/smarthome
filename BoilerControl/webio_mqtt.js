@@ -49,7 +49,7 @@ function Connected() {
 
 /*Callback for failed connection*/
 function ConnectionFailed(res) {
-    console.log("Connect failed:" + res.errorMessage);
+    console.log("Connect failed: errorCode=" + res.errorCode + " " + res.errorMessage);
 
     // 4 = bad username/password, 5 = not authorised: ask again, don't hammer
     if (res.errorCode === 4 || res.errorCode === 5) {
@@ -58,7 +58,7 @@ function ConnectionFailed(res) {
         SmartHomeAuth.require(function (creds) {
             brokerCreds = creds;
             Connect();
-        });
+        }, "The broker rejected that user/password. The user is 'webui', not an email address.");
         return;
     }
     retryTimer = setTimeout(Connect, 5000);

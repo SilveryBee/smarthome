@@ -37,13 +37,13 @@ window.SmartHomeAuth = (function () {
         localStorage.removeItem(KEY_PASS);
     }
 
-    function require(callback) {
+    function require(callback, errorMessage) {
         var creds = saved();
         if (creds) {
             callback(creds);
             return;
         }
-        whenBodyReady(function () { show(callback); });
+        whenBodyReady(function () { show(callback, errorMessage); });
     }
 
     function whenBodyReady(fn) {
@@ -83,7 +83,7 @@ window.SmartHomeAuth = (function () {
         document.head.appendChild(style);
     }
 
-    function show(callback) {
+    function show(callback, errorMessage) {
         if (backdrop) return;
         injectStyle();
 
@@ -109,6 +109,10 @@ window.SmartHomeAuth = (function () {
         var form = backdrop.querySelector("form");
         var error = backdrop.querySelector(".sh-auth-error");
         var userField = form.elements.u;
+
+        if (errorMessage) {
+            error.textContent = errorMessage;
+        }
 
         form.addEventListener("submit", function (ev) {
             ev.preventDefault();

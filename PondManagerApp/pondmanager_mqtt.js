@@ -75,7 +75,7 @@ function Connected() {
  * Callback for failed connection
  */
 function ConnectionFailed(res) {
-    console.log("Connection failed: " + res.errorMessage);
+    console.log("Connection failed: errorCode=" + res.errorCode + " " + res.errorMessage);
     if (window.setOnlineStatus) {
         window.setOnlineStatus(false);
     }
@@ -87,7 +87,7 @@ function ConnectionFailed(res) {
         SmartHomeAuth.require(function (creds) {
             brokerCreds = creds;
             Connect();
-        });
+        }, "The broker rejected that user/password. The user is 'webui', not an email address.");
         return;
     }
     retryTimer = setTimeout(Connect, 5000);

@@ -30,7 +30,7 @@ function Connect() {
     mqttClient.connect({
         onSuccess: Connected,
         onFailure: ConnectionFailed,
-        keepAliveInterval: 10,
+        keepAliveInterval: 60,
         userName: brokerCreds.user,
         password: brokerCreds.pass,
         useSSL: MQTT_CONFIG.useSSL,

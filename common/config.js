@@ -9,8 +9,8 @@
  * the LAN, use host "192.168.2.139", port 1884, path "/" and useSSL false.
  */
 var MQTT_CONFIG = {
-    // Filled in once the Cloudflare tunnel is live:
-    host: "mqtt.example.com",
+    // Broker via Cloudflare Tunnel -> Mosquitto WebSockets listener on port 1884.
+    host: "mqtt.northstar104.cc",
     port: 443,
     path: "/mqtt",
     useSSL: true,

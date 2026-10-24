@@ -5,32 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pond Manager Test Control</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+    <script src="../common/config.js" type="text/javascript"></script>
+    <script src="../common/auth.js" type="text/javascript"></script>
     <script>
-        // MQTT Configuration (same as pondmanager_mqtt.js)
-        var hostname = "542eae39098649348d20f0029dc1ac86.s1.eu.hivemq.cloud";
-        var port = 8884;
-        var clientId = "pondtest_" + new Date().getUTCMilliseconds();
-        var username = "polaris";
-        var password = "84jdF8fGF95";
+        // MQTT Configuration
+        // Endpoint: ../common/config.js   Credentials: ../common/auth.js (prompted once)
         var subscription = "pondmanager/#";
+        var clientId = "pondtest_" + Math.random().toString(16).slice(2, 8);
 
         // Create MQTT client
         var mqttClient = null;
+        var brokerCreds = null;
         var isSimulationActive = false;
 
         // Initialize MQTT connection
         function initMQTT() {
-            mqttClient = new Paho.MQTT.Client(hostname, port, clientId);
+            if (!brokerCreds) {
+                SmartHomeAuth.require(function (creds) {
+                    brokerCreds = creds;
+                    initMQTT();
+                });
+                return;
+            }
+
+            mqttClient = new Paho.MQTT.Client(
+                MQTT_CONFIG.host, MQTT_CONFIG.port, MQTT_CONFIG.path, clientId);
             mqttClient.onMessageArrived = onMessageArrived;
             mqttClient.onConnectionLost = onConnectionLost;
-            
+
             mqttClient.connect({
                 onSuccess: onConnected,
                 onFailure: onConnectionFailed,
-                keepAliveInterval: 10,
-                userName: username,
-                useSSL: true,
-                password: password
+                keepAliveInterval: 60,
+                userName: brokerCreds.user,
+                useSSL: MQTT_CONFIG.useSSL,
+                password: brokerCreds.pass
             });
         }
 

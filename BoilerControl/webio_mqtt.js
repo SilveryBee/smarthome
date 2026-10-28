@@ -39,6 +39,14 @@ function noteFailure(message) {
     return false;
 }
 
+// Paho 1.0.1 reports a CONNACK refusal as errorCode 6 ("Bad Connack return
+// code:5"), not as 4/5, so match on both the code and the message.
+function isAuthFailure(res) {
+    if (!res) return false;
+    if (res.errorCode === 4 || res.errorCode === 5 || res.errorCode === 6) return true;
+    return /return code:5|not authori[sz]ed/i.test(res.errorMessage || "");
+}
+
 SmartHomeAuth.require(function (creds) {
     brokerCreds = creds;
     Connect();
@@ -74,8 +82,8 @@ function Connected() {
 function ConnectionFailed(res) {
     console.log("Connect failed: errorCode=" + res.errorCode + " " + res.errorMessage);
 
-    // 4 = bad username/password, 5 = not authorised
-    if (res.errorCode === 4 || res.errorCode === 5) {
+    // CONNACK 4/5 (Paho reports a CONNACK 5 as errorCode 6)
+    if (isAuthFailure(res)) {
         reauth("The broker rejected that user/password. The user is 'webui', not an email address.");
         return;
     }
@@ -89,7 +97,7 @@ function ConnectionLost(res) {
     console.log("Connection lost: errorCode=" + res.errorCode + " " + res.errorMessage);
 
     // A broker rejection can arrive here rather than in onFailure
-    if (res.errorCode === 4 || res.errorCode === 5) {
+    if (isAuthFailure(res)) {
         reauth("The broker rejected that user/password. The user is 'webui', not an email address.");
         return;
     }

@@ -16,6 +16,28 @@ mqttClient.onConnectionLost = ConnectionLost;
 
 var brokerCreds = null;
 var retryTimer = null;
+var authFailures = 0;
+
+// Ask for the login again. Used when the broker rejects the saved credentials,
+// and after repeated failures - e.g. the password was rotated in Mosquitto.
+function reauth(message) {
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+    SmartHomeAuth.forget();
+    brokerCreds = null;
+    SmartHomeAuth.require(function (creds) {
+        brokerCreds = creds;
+        Connect();
+    }, message);
+}
+
+function noteFailure(message) {
+    authFailures++;
+    if (authFailures >= 3) {
+        reauth(message);
+        return true;
+    }
+    return false;
+}
 
 SmartHomeAuth.require(function (creds) {
     brokerCreds = creds;
@@ -42,6 +64,7 @@ function Connect() {
 /*Callback for successful MQTT connection */
 function Connected() {
     console.log("Connected!");
+    authFailures = 0;
     mqttClient.subscribe(subscription);
     // Send state update request to remote server
     requestStateUpdate();
@@ -51,25 +74,27 @@ function Connected() {
 function ConnectionFailed(res) {
     console.log("Connect failed: errorCode=" + res.errorCode + " " + res.errorMessage);
 
-    // 4 = bad username/password, 5 = not authorised: ask again, don't hammer
+    // 4 = bad username/password, 5 = not authorised
     if (res.errorCode === 4 || res.errorCode === 5) {
-        SmartHomeAuth.forget();
-        brokerCreds = null;
-        SmartHomeAuth.require(function (creds) {
-            brokerCreds = creds;
-            Connect();
-        }, "The broker rejected that user/password. The user is 'webui', not an email address.");
+        reauth("The broker rejected that user/password. The user is 'webui', not an email address.");
         return;
     }
+    if (noteFailure("Could not connect to the broker. Check the network and the login, then try again.")) return;
     retryTimer = setTimeout(Connect, 5000);
 }
 
 /*Callback for lost connection*/
 function ConnectionLost(res) {
-    if (res.errorCode != 0) {
-        console.log("Connection lost:" + res.errorMessage);
-        retryTimer = setTimeout(Connect, 5000);
+    if (res.errorCode == 0) return;
+    console.log("Connection lost: errorCode=" + res.errorCode + " " + res.errorMessage);
+
+    // A broker rejection can arrive here rather than in onFailure
+    if (res.errorCode === 4 || res.errorCode === 5) {
+        reauth("The broker rejected that user/password. The user is 'webui', not an email address.");
+        return;
     }
+    if (noteFailure("Repeated disconnects. Check the broker login, then try again.")) return;
+    retryTimer = setTimeout(Connect, 5000);
 }
 
 /* Callback for incoming message processing */
